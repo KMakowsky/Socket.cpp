@@ -5,7 +5,7 @@ Easy C++ Socket Class
 Can also be combined with lists and threads to run multiple socket connections at the same time.
 In this example the server accepts only one client.
 But if you store the sockets and iterate through them (or split them with threads in multiple processes) you can accept multiple clients.
-```
+```cpp
 string ip = "localhost";
 string port = "1234";
 Socket *masterSocket = new Socket(AF_INET,SOCK_STREAM,0); //AF_INET (Internet mode) SOCK_STREAM (TCP mode) 0 (Protocol any)
@@ -51,7 +51,7 @@ masterSocket->close();
 ```
 
 **Simple Socket Client**
-```
+```cpp
 string ip = Socket::ipFromHostName("google.com"); //Get ip addres from hostname
 string port = "80"; //let's talk on http port
 Socket *sock = new Socket(AF_INET,SOCK_STREAM,0);  //AF_INET (Internet mode) SOCK_STREAM (TCP mode) 0 (Protocol any)
