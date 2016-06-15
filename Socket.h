@@ -17,6 +17,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 #include <vector>
 
 using namespace std;
@@ -43,5 +44,6 @@ public:
     int socket_shutdown(int how);
     void close();
     static int select(vector<Socket> *reads, vector<Socket> *writes, vector<Socket> *exceptions,int seconds);
+    static string ipFromHostName(string hostname);
 };
 #endif
