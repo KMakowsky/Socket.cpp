@@ -22,11 +22,26 @@ Socket::Socket(int domain, int type, int protocol)
     address_info.ai_family = domain;
     address_info.ai_socktype = type;
     address_info.ai_protocol = protocol;
+    
     port = "";
     address = "";
 }
 
 int Socket::bind(string ip, string port){
+    if (address_info.ai_family == AF_UNIX) {
+        
+        struct sockaddr_un addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sun_family = AF_UNIX;
+        strncpy(addr.sun_path, ip.c_str(), sizeof(addr.sun_path)-1);
+        int status = ::bind(sock, (struct sockaddr*)&addr, sizeof(addr));
+        if (status < 0) {
+            //exit(1);
+            cerr << "bind error: " << gai_strerror(errno) << endl;
+        }
+        return status;
+    }
+    
     address = ip;
     this->port = port;
     int status;
@@ -64,7 +79,7 @@ int Socket::connect(string ip, string port){
     status = ::connect(sock, address_info.ai_addr, address_info.ai_addrlen);
     if (status < 0) {
         //exit(1);
-        cerr << "connect error: " << gai_strerror(errno) << endl;
+        cerr << "connect error: " << gai_strerror(status) << endl;
     }
     return status;
 }
@@ -105,18 +120,37 @@ Socket* Socket::accept(){
 }
 int Socket::socket_write(string msg){
     const char * buf = msg.c_str();
-    int len = strlen(buf);
-    int status = send(sock, buf, len, 0);
+    int len = (int)strlen(buf);
+    int status = (int)send(sock, buf, len, 0);
     if (status < 0) {
         //exit(1);
         cerr << "write error: " << gai_strerror(errno) << endl;
     }
     return status;
 }
+int Socket::socket_safe_read(string &buf,int len,int seconds){
+    vector<Socket> reads(1);
+    reads[0] = *this;
+    int count = Socket::select(&reads, NULL, NULL, seconds);
+    if(count < 1){
+       //No new Connection
+        buf = "";
+        return -1;
+    }
+    char buffer[len];
+    bzero(buffer,len);
+    int status = (int)recv(sock, buffer, len-1, 0);
+    if (status < 0) {
+        //exit(1);
+        cerr << "read error: " << gai_strerror(errno) << endl;
+    }
+    buf = string(buffer);
+    return status;
+}
 int Socket::socket_read(string &buf,int len){
     char buffer[len];
     bzero(buffer,len);
-    int status = recv(sock, buffer, len-1, 0);
+    int status = (int)recv(sock, buffer, len-1, 0);
     if (status < 0) {
         //exit(1);
         cerr << "read error: " << gai_strerror(errno) << endl;
@@ -126,7 +160,7 @@ int Socket::socket_read(string &buf,int len){
 }
 int Socket::socket_writeTo(string msg, string ip, string port){
     const char * buf = msg.c_str();
-    int len = strlen(buf);
+    int len = (int)strlen(buf);
     address = ip;
     this->port = port;
     struct addrinfo *res;
@@ -139,7 +173,7 @@ int Socket::socket_writeTo(string msg, string ip, string port){
     address_info.ai_addrlen = res->ai_addrlen;
     address_info.ai_addr = res->ai_addr;
     freeaddrinfo(res);
-    status = sendto(sock, buf, len, 0, address_info.ai_addr, address_info.ai_addrlen);
+    status = (int)sendto(sock, buf, len, 0, address_info.ai_addr, address_info.ai_addrlen);
     if (status < 0) {
         //exit(1);
         cerr << "writeTo error: " << gai_strerror(errno) << endl;
@@ -159,7 +193,7 @@ int Socket::socket_readFrom(string &buf, int len, string ip, string port){
     address_info.ai_addrlen = res->ai_addrlen;
     address_info.ai_addr = res->ai_addr;
     freeaddrinfo(res);
-    status = recvfrom(sock, buffer, len-1, 0,address_info.ai_addr, &address_info.ai_addrlen);
+    status = (int)recvfrom(sock, buffer, len-1, 0,address_info.ai_addr, &address_info.ai_addrlen);
     if (status < 0) {
         //exit(1);
         cerr << "readFrom error: " << gai_strerror(errno) << endl;
@@ -186,6 +220,36 @@ int Socket::socket_get_opt(int level, int optname, void* optval){
         cerr << "socket_get_opt error: " << gai_strerror(errno) << endl;
     }
     return status;
+}
+
+int Socket::set_blocking(){
+    long status = fcntl(sock, F_GETFL, NULL);
+    if (status < 0) {
+        //exit(1);
+        cerr << "set_blocking(get) error: " << gai_strerror(errno) << endl;
+    }
+    status &= (~O_NONBLOCK);
+    status = fcntl(sock, F_SETFL, status);
+    if (status < 0) {
+        //exit(1);
+        cerr << "set_blocking(set) error: " << gai_strerror(errno) << endl;
+    }
+    return (int)status;
+}
+
+int Socket::set_non_blocking(){
+    long status = fcntl(sock, F_GETFL, NULL);
+    if (status < 0) {
+        //exit(1);
+        cerr << "set_non_blocking(get) error: " << gai_strerror(errno) << endl;
+    }
+    status |= O_NONBLOCK;
+    status = fcntl(sock, F_SETFL, status);
+    if (status < 0) {
+        //exit(1);
+        cerr << "set_non_blocking(set) error: " << gai_strerror(errno) << endl;
+    }
+    return (int)status;
 }
 
 int Socket::socket_shutdown(int how){
@@ -252,21 +316,21 @@ int Socket::select(vector<Socket> *reads, vector<Socket> *writes, vector<Socket>
     }
     
     if (reads != NULL) {
-        for (int i = reads->size()-1; i >= 0; i--) {
+        for (int i = (int)reads->size()-1; i >= 0; i--) {
             if (!FD_ISSET(reads->at(i).sock, &readfds)) {
                 reads->push_back(reads->at(i));
             }
         }
     }
     if (writes != NULL) {
-        for (int i = writes->size()-1; i >= 0; i--) {
+        for (int i = (int)writes->size()-1; i >= 0; i--) {
             if (!FD_ISSET(writes->at(i).sock, &writefds)) {
                 writes->push_back(writes->at(i));
             }
         }
     }
     if (exceptions != NULL) {
-        for (int i = exceptions->size()-1; i >= 0; i--) {
+        for (int i = (int)exceptions->size()-1; i >= 0; i--) {
             if (!FD_ISSET(exceptions->at(i).sock, &exceptfds)) {
                 exceptions->push_back(exceptions->at(i));
             }
