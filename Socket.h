@@ -21,6 +21,7 @@
 #include <arpa/inet.h>
 #include <vector>
 #include <sys/un.h>
+#include <errno.h>
 
 using namespace std;
 
