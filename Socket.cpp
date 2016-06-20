@@ -64,6 +64,21 @@ int Socket::bind(string ip, string port){
 }
 
 int Socket::connect(string ip, string port){
+    if (address_info.ai_family == AF_UNIX) {
+        
+        struct sockaddr_un addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sun_family = AF_UNIX;
+        strncpy(addr.sun_path, ip.c_str(), sizeof(addr.sun_path)-1);
+        int status = ::connect(sock, (struct sockaddr*)&addr, sizeof(addr));
+        if (status < 0) {
+            //exit(1);
+            cerr << "connect error: " << gai_strerror(errno) << endl;
+        }
+        return status;
+    }
+    
+    
     address = ip;
     this->port = port;
     struct addrinfo *res;
@@ -129,8 +144,8 @@ int Socket::socket_write(string msg){
     return status;
 }
 int Socket::socket_safe_read(string &buf,int len,int seconds){
-    vector<Socket> reads(1);
-    reads[0] = *this;
+    vector<Socket> reads;
+    reads.push_back(*this);
     int count = Socket::select(&reads, NULL, NULL, seconds);
     if(count < 1){
        //No new Connection
@@ -266,6 +281,7 @@ void Socket::close(){
 }
 
 int Socket::select(vector<Socket> *reads, vector<Socket> *writes, vector<Socket> *exceptions,int seconds){
+    int id = reads->at(0).sock;
     struct timeval tv;
     fd_set readfds;
     fd_set writefds;
@@ -274,10 +290,15 @@ int Socket::select(vector<Socket> *reads, vector<Socket> *writes, vector<Socket>
     tv.tv_sec = seconds;
     tv.tv_usec = 0;
     
-    int maxSock = 0;
     
+    FD_ZERO(&readfds);
+    
+    FD_ZERO(&writefds);
+    
+    FD_ZERO(&exceptfds);
+    
+    int maxSock = 0;
     if(reads != NULL){
-        FD_ZERO(&readfds);
         for (int i = 0; i < reads->size(); i++) {
             int sockInt = reads->at(i).sock;
             if (sockInt > maxSock) {
@@ -287,7 +308,6 @@ int Socket::select(vector<Socket> *reads, vector<Socket> *writes, vector<Socket>
         }
     }
     if(writes != NULL){
-        FD_ZERO(&writefds);
         for (int i = 0; i < writes->size(); i++) {
             int sockInt = writes->at(i).sock;
             if (sockInt > maxSock) {
@@ -297,7 +317,6 @@ int Socket::select(vector<Socket> *reads, vector<Socket> *writes, vector<Socket>
         }
     }
     if(exceptions != NULL){
-        FD_ZERO(&exceptfds);
         for (int i = 0; i < exceptions->size(); i++) {
             int sockInt = exceptions->at(i).sock;
             if (sockInt > maxSock) {
@@ -314,25 +333,24 @@ int Socket::select(vector<Socket> *reads, vector<Socket> *writes, vector<Socket>
         //exit(1);
         cerr << "select error: " << gai_strerror(errno) << endl;
     }
-    
     if (reads != NULL) {
         for (int i = (int)reads->size()-1; i >= 0; i--) {
             if (!FD_ISSET(reads->at(i).sock, &readfds)) {
-                reads->push_back(reads->at(i));
+                reads->erase(reads->begin()+i);
             }
         }
     }
     if (writes != NULL) {
         for (int i = (int)writes->size()-1; i >= 0; i--) {
             if (!FD_ISSET(writes->at(i).sock, &writefds)) {
-                writes->push_back(writes->at(i));
+                writes->erase(reads->begin()+i);
             }
         }
     }
     if (exceptions != NULL) {
         for (int i = (int)exceptions->size()-1; i >= 0; i--) {
             if (!FD_ISSET(exceptions->at(i).sock, &exceptfds)) {
-                exceptions->push_back(exceptions->at(i));
+                exceptions->erase(exceptions->begin()+i);
             }
         }
     }
