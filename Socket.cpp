@@ -213,7 +213,7 @@ int Socket::socket_readFrom(string &buf, int len, string ip, string port){
         //exit(1);
         cerr << "readFrom error: " << gai_strerror(errno) << endl;
     }
-    buf = string(buf);
+    buf = string(buffer); 
     return status;
 }
 
